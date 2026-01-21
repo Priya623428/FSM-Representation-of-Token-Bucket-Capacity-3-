@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Bucket FSM </title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #66eadf 0%, #e69abc 100%);
+            color: rgb(255, 255, 255);
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { margin-bottom: 20px; }
+        .container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .bucket {
+            width: 200px;
+            height: 300px;
+            background: #333;
+            border: 5px solid #fff;
+            border-radius: 10px 10px 0 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .token {
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, #ffd700, #ff8c00);
+            border-radius: 50%;
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: drop 1s ease-in-out;
+        }
+        @keyframes drop {
+            0% { transform: translateX(-50%) translateY(-100px); opacity: 0; }
+            100% { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        .fsm {
+            width: 400px;
+            height: 300px;
+            position: relative;
+        }
+        .state {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #555;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: all 0.5s;
+        }
+        .state.active {
+            background: #00ff00;
+            box-shadow: 0 0 20px #00ff00;
+        }
+        .state.empty { background: #ff0000; }
+        .arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 10px solid #fff;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .arrow.active { opacity: 1; }
+        .controls {
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover { background: #45a049; }
+        .log {
+            margin-top: 20px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Token Bucket FSM (Capacity=3)</h1>
+    <p>States: 0-3 tokens. Transitions: Add (up) or Consume (down). Watch the live FSM!</p>
+    <div class="container">
+        <div class="bucket" id="bucket"></div>
+        <div class="fsm">
+            <!-- FSM States -->
+            <div class="state" id="state0" style="top: 200px; left: 50px;">0</div>
+            <div class="state" id="state1" style="top: 120px; left: 150px;">1</div>
+            <div class="state" id="state2" style="top: 40px; left: 250px;">2</div>
+            <div class="state" id="state3" style="top: 120px; left: 350px;">3</div>
+            <!-- Arrows for transitions -->
+            <div class="arrow" id="arrow01" style="top: 180px; left: 110px; transform: rotate(45deg);"></div>
+            <div class="arrow" id="arrow12" style="top: 80px; left: 210px; transform: rotate(45deg);"></div>
+            <div class="arrow" id="arrow23" style="top: 80px; left: 310px; transform: rotate(-45deg);"></div>
+            <div class="arrow" id="arrow10" style="top: 140px; left: 110px; transform: rotate(-45deg);"></div>
+            <div class="arrow" id="arrow21" style="top: 80px; left: 210px; transform: rotate(-45deg);"></div>
+            <div class="arrow" id="arrow32" style="top: 140px; left: 310px; transform: rotate(45deg);"></div>
+        </div>
+    </div>
+    <div class="controls">
+        <button id="addBtn">Add Token</button>
+        <button id="consumeBtn">Consume Token</button>
+        <button id="autoBtn">Auto Play</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+    <div class="log" id="log"></div>
+
+    <script>
+        let tokens = 0;
+        const capacity = 3;
+        const bucket = document.getElementById('bucket');
+        const states = [document.getElementById('state0'), document.getElementById('state1'), document.getElementById('state2'), document.getElementById('state3')];
+        const arrows = {
+            '01': document.getElementById('arrow01'),
+            '12': document.getElementById('arrow12'),
+            '23': document.getElementById('arrow23'),
+            '10': document.getElementById('arrow10'),
+            '21': document.getElementById('arrow21'),
+            '32': document.getElementById('arrow32')
+        };
+        const log = document.getElementById('log');
+        let autoInterval;
+
+        function updateFSM() {
+            // Update state visuals
+            states.forEach((state, i) => {
+                state.classList.remove('active', 'empty');
+                if (i === tokens) {
+                    state.classList.add('active');
+                }
+                if (i === 0 && tokens === 0) {
+                    state.classList.add('empty');
+                }
+            });
+            // Update bucket visuals
+            bucket.innerHTML = '';
+            for (let i = 0; i < tokens; i++) {
+                const token = document.createElement('div');
+                token.className = 'token';
+                token.style.bottom = `${i * 50 + 10}px`;
+                bucket.appendChild(token);
+            }
+        }
+
+        function logTransition(action, from, to) {
+            const entry = document.createElement('p');
+            entry.textContent = `${action}: State ${from} → ${to}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function addToken() {
+            if (tokens < capacity) {
+                const from = tokens;
+                tokens++;
+                updateFSM();
+                arrows[`${from}${tokens}`].classList.add('active');
+                setTimeout(() => arrows[`${from}${tokens}`].classList.remove('active'), 1000);
+                logTransition('Add Token', from, tokens);
+            }
+        }
+
+        function consumeToken() {
+            if (tokens > 0) {
+                const from = tokens;
+                tokens--;
+                updateFSM();
+                arrows[`${from}${tokens}`].classList.add('active');
+                setTimeout(() => arrows[`${from}${tokens}`].classList.remove('active'), 1000);
+                logTransition('Consume Token', from, tokens);
+                // Particle effect on consume
+                const particle = document.createElement('div');
+                particle.style.position = 'absolute';
+                particle.style.width = '10px';
+                particle.style.height = '10px';
+                particle.style.background = '#ff0000';
+                particle.style.borderRadius = '50%';
+                particle.style.top = '50%';
+                particle.style.left = '50%';
+                particle.style.animation = 'explode 0.5s ease-out';
+                document.body.appendChild(particle);
+                setTimeout(() => document.body.removeChild(particle), 500);
+            }
+        }
+
+        function autoPlay() {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+                document.getElementById('autoBtn').textContent = 'Auto Play';
+            } else {
+                document.getElementById('autoBtn').textContent = 'Stop Auto';
+                autoInterval = setInterval(() => {
+                    if (Math.random() > 0.5) addToken(); else consumeToken();
+                }, 1500);
+            }
+        }
+
+        function reset() {
+            tokens = 0;
+            updateFSM();
+            log.innerHTML = '';
+            if (autoInterval) autoPlay(); // Stop auto if running
+        }
+
+        // Event listeners
+        document.getElementById('addBtn').addEventListener('click', addToken);
+        document.getElementById('consumeBtn').addEventListener('click', consumeToken);
+        document.getElementById('autoBtn').addEventListener('click', autoPlay);
+        document.getElementById('resetBtn').addEventListener('click', reset);
+
+        // Initial setup
+        updateFSM();
+    </script>
+</body>
+</html>
